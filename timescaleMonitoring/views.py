@@ -1,4 +1,4 @@
-from datetime import datetime, tzinfo
+from datetime import datetime, tzinfo, timedelta
 import json
 from os import name
 import time
@@ -39,7 +39,7 @@ from .models import (
 from realtimeMonitoring import settings
 import dateutil.relativedelta
 from django.db.models import Avg, Max, Min, Sum
-
+from django.db import connection
 
 class DashboardView(TemplateView):
     template_name = "index.html"
@@ -770,3 +770,40 @@ Filtro para formatear datos en los templates
 @register.filter
 def add_str(str1, str2):
     return str1 + str2
+
+def daily_avg_by_city(request):
+    """
+    Promedio diario por ciudad y variable en los últimos 7 días (TimescaleDB).
+    """
+    end = datetime.now()
+    start = end - timedelta(days=7)
+
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT 
+                c.name AS city,
+                m.name AS measurement,
+                time_bucket('1 day', d.base_time) AS day,
+                AVG(d.avg_value) AS avg_value
+            FROM "realtimeGraph_data" d
+            JOIN "realtimeGraph_station" s ON d.station_id = s.id
+            JOIN "realtimeGraph_location" l ON s.location_id = l.id
+            JOIN "realtimeGraph_city" c ON l.city_id = c.id
+            JOIN "realtimeGraph_measurement" m ON d.measurement_id = m.id
+            WHERE d.base_time >= %s AND d.base_time <= %s
+            GROUP BY city, measurement, day
+            ORDER BY city, measurement, day;
+        """, [start, end])
+
+        rows = cursor.fetchall()
+
+    result = []
+    for city, measurement, day, avg_value in rows:
+        result.append({
+            "city": city,
+            "measurement": measurement,
+            "day": day.strftime("%Y-%m-%d"),
+            "avg_value": float(avg_value)
+        })
+
+    return JsonResponse(result, safe=False)
