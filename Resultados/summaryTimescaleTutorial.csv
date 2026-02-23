@@ -1,0 +1,3 @@
+Label,# Samples,Average,Min,Max,Std. Dev.,Error %,Throughput,Received KB/sec,Sent KB/sec,Avg. Bytes
+Petición a timescale,60,3103,516,3729,548.49,0.000%,14.25517,169.85,2.37,12201.0
+TOTAL,60,3103,516,3729,548.49,0.000%,14.25517,169.85,2.37,12201.0

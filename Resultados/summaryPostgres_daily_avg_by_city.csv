@@ -1,0 +1,3 @@
+Label,# Samples,Average,Min,Max,Std. Dev.,Error %,Throughput,Received KB/sec,Sent KB/sec,Avg. Bytes
+Petición a postgres,60,652,309,958,164.20,0.000%,34.07155,7.82,4.33,235.0
+TOTAL,60,652,309,958,164.20,0.000%,34.07155,7.82,4.33,235.0
