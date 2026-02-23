@@ -50,20 +50,45 @@ Esta consulta permite:
 ## 🗄 Implementación en PostgreSQL
 
 ``` python
-from django.db.models import Avg
-from django.db.models.functions import TruncDate
 from django.http import JsonResponse
-from .models import Data
+from django.db import connection
+from django.utils import timezone
+from datetime import timedelta
 
-def daily_average(request):
-    results = (
-        Data.objects
-        .annotate(day=TruncDate('timestamp'))
-        .values('day', 'city')
-        .annotate(avg_temp=Avg('value'))
-        .order_by('day')
-    )
-    return JsonResponse(list(results), safe=False)
+def daily_avg_by_city(request):
+    end = timezone.now()
+    start = end - timedelta(days=7)
+
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT 
+                c.name AS city,
+                m.name AS measurement,
+                DATE(d.base_time) AS day,
+                AVG(d.avg_value) AS avg_value
+            FROM "realtimeGraph_data" d
+            JOIN "realtimeGraph_station" s ON d.station_id = s.id
+            JOIN "realtimeGraph_location" l ON s.location_id = l.id
+            JOIN "realtimeGraph_city" c ON l.city_id = c.id
+            JOIN "realtimeGraph_measurement" m ON d.measurement_id = m.id
+            WHERE d.base_time >= %s AND d.base_time <= %s
+            GROUP BY city, measurement, day
+            ORDER BY city, measurement, day;
+        """, [start, end])
+
+        rows = cursor.fetchall()
+
+    data = []
+    for city, measurement, day, avg_value in rows:
+        data.append({
+            "city": city,
+            "measurement": measurement,
+            "day": day.isoformat(),
+            "avg_value": float(avg_value) if avg_value is not None else None
+        })
+
+    return JsonResponse(data, safe=False)
+
 ```
 
 ------------------------------------------------------------------------
@@ -71,28 +96,45 @@ def daily_average(request):
 ## ⏱ Implementación en TimescaleDB
 
 ``` python
-from django.db import connection
 from django.http import JsonResponse
+from django.db import connection
+from django.utils import timezone
+from datetime import timedelta
 
-def daily_average(request):
+def daily_avg_by_city(request):
+    end = timezone.now()
+    start = end - timedelta(days=7)
+
     with connection.cursor() as cursor:
         cursor.execute("""
-            SELECT time_bucket('1 day', timestamp) AS day,
-                   city,
-                   AVG(value) AS avg_temp
-            FROM data
-            WHERE timestamp >= NOW() - INTERVAL '7 days'
-            GROUP BY day, city
-            ORDER BY day;
-        """)
+            SELECT 
+                c.name AS city,
+                m.name AS measurement,
+                time_bucket('1 day', d.base_time) AS day,
+                AVG(d.avg_value) AS avg_value
+            FROM "realtimeGraph_data" d
+            JOIN "realtimeGraph_station" s ON d.station_id = s.id
+            JOIN "realtimeGraph_location" l ON s.location_id = l.id
+            JOIN "realtimeGraph_city" c ON l.city_id = c.id
+            JOIN "realtimeGraph_measurement" m ON d.measurement_id = m.id
+            WHERE d.base_time >= %s AND d.base_time <= %s
+            GROUP BY city, measurement, day
+            ORDER BY city, measurement, day;
+        """, [start, end])
+
         rows = cursor.fetchall()
 
-    results = [
-        {"day": row[0], "city": row[1], "avg_temp": row[2]}
-        for row in rows
-    ]
+    data = []
+    for city, measurement, day, avg_value in rows:
+        data.append({
+            "city": city,
+            "measurement": measurement,
+            "day": day.isoformat(),
+            "avg_value": float(avg_value) if avg_value is not None else None
+        })
 
-    return JsonResponse(results, safe=False)
+    return JsonResponse(data, safe=False)
+
 ```
 
 ------------------------------------------------------------------------
